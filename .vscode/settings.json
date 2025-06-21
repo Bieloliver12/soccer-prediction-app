@@ -1,0 +1,8 @@
+{
+    "python.defaultInterpreterPath": "./soccer_env/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.linting.enabled": true,
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    "python.formatting.provider": "black"
+}
