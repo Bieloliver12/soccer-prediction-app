@@ -59,60 +59,61 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
+    data_path = "E0.csv"
     
-    data_path = "Club-Football-Match-Data-2000-2025/data/E0.csv"
+    # Try multiple possible paths
+    possible_paths = [
+        "E0.csv",
+        "Club-Football-Match-Data-2000-2025/data/E0.csv",
+        "data/E0.csv",
+        "./E0.csv"
+    ]
     
-   
-    if not os.path.exists(data_path):
-        st.warning(" Soccer data not found. Downloading...")
-        success = download_soccer_data()
-        if not success:
-            st.error("❌ Failed to download data. Please check your internet connection.")
-            return None
+    df = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            df = pd.read_csv(path)
+            break
     
-    try:
-        df = pd.read_csv(data_path)
+    if df is None:
+        # Create sample data if file not found
+        st.warning("Data file not found. Using sample data.")
+        np.random.seed(42)
+        teams = ['Arsenal', 'Chelsea', 'Liverpool', 'Man United', 'Man City', 'Tottenham', 'Leicester', 'West Ham', 'Everton', 'Newcastle']
+        dates = pd.date_range('2023-01-01', periods=100, freq='D')
         
-        
-        df['Result'] = df.apply(lambda x: 'Home Win' if x['FTHG'] > x['FTAG'] 
-                               else ('Away Win' if x['FTHG'] < x['FTAG'] else 'Draw'), axis=1)
-        df['Total_Goals'] = df['FTHG'] + df['FTAG']
-        df['Goal_Difference'] = df['FTHG'] - df['FTAG']
-        
-        # Convert Date if exists
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        
-        return df
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        return None
-
-def download_soccer_data():
-    """Download soccer data automatically"""
-    try:
-        from data_downloader import SoccerDataDownloader
-        
-        downloader = SoccerDataDownloader()
-        downloader.create_directories()
-        
-        with st.spinner("Downloading Premier League data..."):
-            result = downloader.download_and_prepare_data()
+        data = []
+        for _ in range(500):
+            home_team = np.random.choice(teams)
+            away_team = np.random.choice([t for t in teams if t != home_team])
+            home_goals = np.random.poisson(1.5)
+            away_goals = np.random.poisson(1.2)
             
-        if result:
-            st.success("✅ Data downloaded successfully!")
-            return True
-        return False
+            data.append({
+                'Date': np.random.choice(dates),
+                'HomeTeam': home_team,
+                'AwayTeam': away_team,
+                'FTHG': home_goals,
+                'FTAG': away_goals,
+                'FTR': 'H' if home_goals > away_goals else ('A' if away_goals > home_goals else 'D')
+            })
         
-    except ImportError:
-        st.error("Data downloader module not found.")
-        return False
-    except Exception as e:
-        st.error(f"Download error: {e}")
-        return False
+        df = pd.DataFrame(data)
+    
+    # Add calculated columns
+    df['Result'] = df.apply(lambda x: 'Home Win' if x['FTHG'] > x['FTAG'] 
+                           else ('Away Win' if x['FTHG'] < x['FTAG'] else 'Draw'), axis=1)
+    df['Total_Goals'] = df['FTHG'] + df['FTAG']
+    df['Goal_Difference'] = df['FTHG'] - df['FTAG']
+    
+    # Convert Date if exists
+    if 'Date' in df.columns:
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    
+    return df
 
 def get_team_data(df, team_name):
-    """Get all matches for a specific team"""
+    
     team_matches = df[(df['HomeTeam'] == team_name) | (df['AwayTeam'] == team_name)].copy()
     
     # Create team-specific columns
@@ -131,12 +132,12 @@ def get_team_data(df, team_name):
     return team_matches
 
 def page_data_overview():
-    """Page 1: Simple Data Overview"""
+    
     st.markdown('<h1 class="main-header">⚽ Premier League Data Overview</h1>', unsafe_allow_html=True)
     
     df = load_data()
     if df is None:
-        st.warning("Please download data using the button above to continue.")
+        st.error("Unable to load data.")
         return
     
     # Dataset Overview
@@ -151,11 +152,8 @@ def page_data_overview():
         st.metric("Total Teams", total_teams)
     with col3:
         if 'Date' in df.columns:
-            try:
-                seasons = len(df['Date'].dt.year.unique())
-                st.metric("Seasons", seasons)
-            except:
-                st.metric("Seasons", "N/A")
+            seasons = len(df['Date'].dt.year.unique())
+            st.metric("Seasons", seasons)
         else:
             st.metric("Seasons", "N/A")
     with col4:
@@ -212,7 +210,7 @@ def page_data_overview():
         st.plotly_chart(fig_goals_team, use_container_width=True)
     
     # Sample data preview
-    st.markdown('<h2 class="sub-header"> Recent Matches</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="sub-header">📋 Recent Matches</h2>', unsafe_allow_html=True)
     
     # Show recent matches
     display_cols = ['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'Result']
@@ -226,8 +224,8 @@ def page_data_overview():
     st.dataframe(recent_matches[available_cols], use_container_width=True)
 
 def page_team_eda():
-    """Page 2: Team-Focused EDA"""
-    st.markdown('<h1 class="main-header"> Team Analysis Dashboard</h1>', unsafe_allow_html=True)
+    
+    st.markdown('<h1 class="main-header">🏆 Team Analysis Dashboard</h1>', unsafe_allow_html=True)
     
     df = load_data()
     if df is None:
@@ -239,8 +237,7 @@ def page_team_eda():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        selected_team = st.selectbox(" Select Team for Analysis:", all_teams, 
-                                    help="Choose a team to see detailed analytics")
+        selected_team = st.selectbox("🎯 Select Team for Analysis:", all_teams)
     
     with col2:
         st.markdown(f'<div class="team-card"><h3>{selected_team}</h3><p>Team Analytics</p></div>', 
@@ -335,7 +332,7 @@ def page_team_eda():
     
     # Performance over time (if date available)
     if 'Date' in team_data.columns and not team_data['Date'].isna().all():
-        st.markdown('<h2 class="sub-header"> Performance Over Time</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="sub-header">📅 Performance Over Time</h2>', unsafe_allow_html=True)
         
         # Sort by date and create cumulative stats
         team_data_sorted = team_data.sort_values('Date').reset_index(drop=True)
@@ -408,7 +405,7 @@ def page_team_eda():
     st.dataframe(recent_matches[available_cols].reset_index(drop=True), use_container_width=True)
 
 def page_team_statistics():
-    """Page 3: Team Statistical Analysis"""
+    
     st.markdown('<h1 class="main-header">📈 Team Statistical Analysis</h1>', unsafe_allow_html=True)
     
     df = load_data()
@@ -499,7 +496,7 @@ def page_team_statistics():
         st.write(f"Min: {team_data['Opponent_Goals'].min()}")
     
     # Performance patterns
-    st.markdown('<h2 class="sub-header"> Performance Patterns</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="sub-header">🎯 Performance Patterns</h2>', unsafe_allow_html=True)
     
     # Goals correlation analysis
     correlation = team_data['Team_Goals'].corr(team_data['Opponent_Goals'])
@@ -595,7 +592,7 @@ def page_team_statistics():
             st.info("No head-to-head matches found between these teams.")
 
 def page_team_insights():
-    """Page 4: Team ML Insights"""
+    
     st.markdown('<h1 class="main-header"> Team ML Insights</h1>', unsafe_allow_html=True)
     
     df = load_data()
@@ -608,14 +605,12 @@ def page_team_insights():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        selected_team = st.selectbox(" Select Team for ML Analysis:", all_teams)
+        selected_team = st.selectbox("🎯 Select Team for ML Analysis:", all_teams)
     
     with col2:
         analysis_type = st.selectbox("📊 Analysis Type:", [
             "Performance Prediction",
-            "Goal Scoring Patterns", 
-            "Win Probability Analysis",
-            "Form Trends"
+            "Win Probability Analysis"
         ])
     
     if not selected_team:
@@ -625,7 +620,7 @@ def page_team_insights():
     
     # Prepare ML features
     def prepare_ml_features(df):
-        """Prepare features for ML analysis"""
+        
         # Encode teams
         le_home = LabelEncoder()
         le_away = LabelEncoder()
@@ -656,24 +651,21 @@ def page_team_insights():
         predictions = {}
         for opponent in all_teams:
             if opponent != selected_team:
-                try:
-                    opp_encoded = le_away.transform([opponent])[0] if opponent in le_away.classes_ else 0
-                    
-                    # Home match prediction
-                    home_pred = model.predict_proba([[team_encoded, opp_encoded]])[0]
-                    home_probs = dict(zip(model.classes_, home_pred))
-                    
-                    # Away match prediction  
-                    away_pred = model.predict_proba([[opp_encoded, team_encoded]])[0]
-                    away_probs = dict(zip(model.classes_, away_pred))
-                    
-                    predictions[opponent] = {
-                        'Home_Win_Prob': home_probs.get('Home Win', 0),
-                        'Away_Win_Prob': away_probs.get('Away Win', 0),
-                        'Avg_Win_Prob': (home_probs.get('Home Win', 0) + away_probs.get('Away Win', 0)) / 2
-                    }
-                except:
-                    continue
+                opp_encoded = le_away.transform([opponent])[0] if opponent in le_away.classes_ else 0
+                
+                # Home match prediction
+                home_pred = model.predict_proba([[team_encoded, opp_encoded]])[0]
+                home_probs = dict(zip(model.classes_, home_pred))
+                
+                # Away match prediction  
+                away_pred = model.predict_proba([[opp_encoded, team_encoded]])[0]
+                away_probs = dict(zip(model.classes_, away_pred))
+                
+                predictions[opponent] = {
+                    'Home_Win_Prob': home_probs.get('Home Win', 0),
+                    'Away_Win_Prob': away_probs.get('Away Win', 0),
+                    'Avg_Win_Prob': (home_probs.get('Home Win', 0) + away_probs.get('Away Win', 0)) / 2
+                }
         
         if predictions:
             # Create predictions dataframe
@@ -713,60 +705,6 @@ def page_team_insights():
                 for i, (opp, data) in enumerate(pred_df.tail(5).iterrows(), 1):
                     st.write(f"{i}. {opp}: {data['Avg_Win_Prob']:.1%} win probability")
     
-    elif analysis_type == "Goal Scoring Patterns":
-        st.markdown('<h2 class="sub-header">⚽ Goal Scoring Pattern Analysis</h2>', unsafe_allow_html=True)
-        
-        # Analyze goal scoring patterns using ML
-        from sklearn.cluster import KMeans
-        
-        # Prepare features for clustering
-        features = team_data[['Team_Goals', 'Opponent_Goals']].values
-        
-        # Apply K-means clustering
-        kmeans = KMeans(n_clusters=3, random_state=42)
-        team_data['Performance_Cluster'] = kmeans.fit_predict(features)
-        
-        # Map clusters to performance types
-        cluster_means = team_data.groupby('Performance_Cluster')[['Team_Goals', 'Opponent_Goals']].mean()
-        cluster_labels = {}
-        
-        for cluster in range(3):
-            goals_for = cluster_means.loc[cluster, 'Team_Goals']
-            goals_against = cluster_means.loc[cluster, 'Opponent_Goals']
-            
-            if goals_for > 2 and goals_against < 1.5:
-                cluster_labels[cluster] = 'Dominant'
-            elif goals_for > 1.5 and goals_against > 1.5:
-                cluster_labels[cluster] = 'High Scoring'
-            else:
-                cluster_labels[cluster] = 'Defensive'
-        
-        team_data['Performance_Type'] = team_data['Performance_Cluster'].map(cluster_labels)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Performance type distribution
-            perf_counts = team_data['Performance_Type'].value_counts()
-            fig_perf = px.pie(values=perf_counts.values, names=perf_counts.index,
-                             title=f"{selected_team} - Performance Types",
-                             color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1'])
-            st.plotly_chart(fig_perf, use_container_width=True)
-        
-        with col2:
-            # Scatter plot with clusters
-            fig_scatter = px.scatter(team_data, x='Team_Goals', y='Opponent_Goals',
-                                   color='Performance_Type',
-                                   title=f"{selected_team} - Goal Patterns",
-                                   size_max=10)
-            st.plotly_chart(fig_scatter, use_container_width=True)
-        
-        # Performance insights
-        st.markdown("** Performance Insights:**")
-        for perf_type, count in perf_counts.items():
-            percentage = count / len(team_data) * 100
-            st.write(f"• {perf_type} matches: {count} ({percentage:.1f}%)")
-    
     elif analysis_type == "Win Probability Analysis":
         st.markdown('<h2 class="sub-header">📊 Win Probability Analysis</h2>', unsafe_allow_html=True)
         
@@ -788,7 +726,7 @@ def page_team_insights():
             
             st.markdown("**Venue Performance:**")
             for venue, data in venue_wins.iterrows():
-                st.write(f"• {venue}: {data['Win_Rate']:.1f}% ({data['sum']}/{data['count']})")
+                st.write(f"• {venue}: {data['Win_Rate']:.1f}% ({int(data['sum'])}/{int(data['count'])})")
         
         with col2:
             # Win probability by goals scored
@@ -802,7 +740,7 @@ def page_team_insights():
             
             st.markdown("**Goals Impact:**")
             for goals, data in goals_wins.iterrows():
-                st.write(f"• {goals} goals: {data['mean']*100:.1f}% win rate")
+                st.write(f"• {int(goals)} goals: {data['mean']*100:.1f}% win rate")
         
         # Logistic regression for win probability
         from sklearn.linear_model import LogisticRegression
@@ -834,92 +772,10 @@ def page_team_insights():
             fig_importance = px.bar(feature_importance, x='Feature', y='Importance',
                                    title="Feature Importance for Winning")
             st.plotly_chart(fig_importance, use_container_width=True)
-    
-    elif analysis_type == "Form Trends":
-        st.markdown('<h2 class="sub-header">📈 Form Trend Analysis</h2>', unsafe_allow_html=True)
-        
-        # Analyze team form trends
-        if 'Date' in team_data.columns and not team_data['Date'].isna().all():
-            team_data_sorted = team_data.sort_values('Date').reset_index(drop=True)
-        else:
-            team_data_sorted = team_data.reset_index(drop=True)
-        
-        # Calculate rolling metrics
-        team_data_sorted['Points'] = team_data_sorted['Team_Result'].map({'Win': 3, 'Draw': 1, 'Loss': 0})
-        team_data_sorted['Rolling_Points'] = team_data_sorted['Points'].rolling(window=5, min_periods=1).mean()
-        team_data_sorted['Rolling_Goals'] = team_data_sorted['Team_Goals'].rolling(window=5, min_periods=1).mean()
-        team_data_sorted['Rolling_Conceded'] = team_data_sorted['Opponent_Goals'].rolling(window=5, min_periods=1).mean()
-        team_data_sorted['Match_Number'] = range(1, len(team_data_sorted) + 1)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Form trend (points)
-            fig_form = px.line(team_data_sorted, x='Match_Number', y='Rolling_Points',
-                              title=f"{selected_team} - Form Trend (5-match rolling average)",
-                              markers=True)
-            fig_form.add_hline(y=2, line_dash="dash", line_color="green", 
-                              annotation_text="Championship Form (2+ pts/game)")
-            fig_form.add_hline(y=1, line_dash="dash", line_color="red", 
-                              annotation_text="Relegation Form (1 pt/game)")
-            st.plotly_chart(fig_form, use_container_width=True)
-        
-        with col2:
-            # Goals trend
-            fig_goals_trend = go.Figure()
-            fig_goals_trend.add_trace(go.Scatter(x=team_data_sorted['Match_Number'], 
-                                               y=team_data_sorted['Rolling_Goals'],
-                                               mode='lines+markers', name='Goals Scored',
-                                               line=dict(color='blue')))
-            fig_goals_trend.add_trace(go.Scatter(x=team_data_sorted['Match_Number'], 
-                                               y=team_data_sorted['Rolling_Conceded'],
-                                               mode='lines+markers', name='Goals Conceded',
-                                               line=dict(color='red')))
-            fig_goals_trend.update_layout(title=f"{selected_team} - Goals Trend", 
-                                        xaxis_title="Match Number", yaxis_title="Goals")
-            st.plotly_chart(fig_goals_trend, use_container_width=True)
-        
-        # Current form analysis
-        recent_matches = 10
-        if len(team_data_sorted) >= recent_matches:
-            recent_form = team_data_sorted.tail(recent_matches)
-            recent_points = recent_form['Points'].sum()
-            recent_ppg = recent_points / recent_matches
-            
-            st.markdown(f"**📊 Recent Form Analysis (Last {recent_matches} matches):**")
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Points", recent_points)
-            with col2:
-                st.metric("Points/Game", f"{recent_ppg:.2f}")
-            with col3:
-                recent_wins = len(recent_form[recent_form['Team_Result'] == 'Win'])
-                st.metric("Wins", recent_wins)
-            with col4:
-                recent_goals = recent_form['Team_Goals'].sum()
-                st.metric("Goals", recent_goals)
-            
-            # Form classification
-            if recent_ppg >= 2.0:
-                form_status = "🔥 Excellent Form"
-                form_color = "green"
-            elif recent_ppg >= 1.5:
-                form_status = "📈 Good Form" 
-                form_color = "blue"
-            elif recent_ppg >= 1.0:
-                form_status = "📊 Average Form"
-                form_color = "orange"
-            else:
-                form_status = "📉 Poor Form"
-                form_color = "red"
-            
-            st.markdown(f"**Current Status:** :{form_color}[{form_status}]")
 
 def page_prediction():
-    """Page 5: Match Prediction"""
-    st.markdown('<h1 class="main-header"> Match Prediction</h1>', unsafe_allow_html=True)
+    
+    st.markdown('<h1 class="main-header">🎮 Match Prediction</h1>', unsafe_allow_html=True)
     
     df = load_data()
     if df is None:
@@ -928,7 +784,7 @@ def page_prediction():
     # Prepare and train model automatically
     @st.cache_resource
     def prepare_prediction_model(df):
-        """Prepare and train the prediction model"""
+        
         df_ml = df.copy()
         
         # Encode teams
@@ -1007,141 +863,136 @@ def page_prediction():
     # Prediction button
     if st.button("🎯 Predict Match Outcome", type="primary", use_container_width=True):
         if home_team == away_team:
-            st.error("⚠️ Please select different teams for home and away.")
+            st.error(" Please select different teams for home and away.")
         else:
-            try:
-                # Encode teams
-                home_encoded = le_home.transform([home_team])[0]
-                away_encoded = le_away.transform([away_team])[0]
-                
-                # Prepare features
-                features = [home_encoded, away_encoded]
-                
-                # Add additional features if model was trained with them
-                additional_features = ['HS', 'AS', 'HST', 'AST', 'HC', 'AC']
-                for feature in additional_features:
-                    if feature in df.columns and feature in feature_cols:
-                        # Use team averages for additional features
-                        home_avg = df[df['HomeTeam'] == home_team][feature].mean()
-                        away_avg = df[df['AwayTeam'] == away_team][feature].mean()
-                        
-                        if pd.isna(home_avg):
-                            home_avg = df[feature].mean()
-                        if pd.isna(away_avg):
-                            away_avg = df[feature].mean()
-                        
-                        features.extend([home_avg, away_avg])
-                
-                # Ensure we have the right number of features
-                while len(features) < len(feature_cols):
-                    features.append(0)
-                
-                features_array = np.array(features[:len(feature_cols)]).reshape(1, -1)
-                
-                # Make prediction
-                prediction = model.predict(features_array)[0]
-                probabilities = model.predict_proba(features_array)[0]
-                
-                # Display results
-                st.markdown('<h3 class="sub-header"> Prediction Results</h3>', unsafe_allow_html=True)
-                
-                # Main prediction
-                st.markdown(f"""
-                <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                            border-radius: 15px; color: white; margin: 1rem 0;">
-                    <h2>{home_team} vs {away_team}</h2>
-                    <h1>🏆 {prediction}</h1>
-                    <h3>Confidence: {max(probabilities):.1%}</h3>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Probability breakdown
-                classes = model.classes_
-                prob_dict = dict(zip(classes, probabilities))
-                
-                st.markdown("**📊 Outcome Probabilities:**")
-                
-                cols = st.columns(len(classes))
-                for i, (outcome, prob) in enumerate(prob_dict.items()):
-                    with cols[i]:
-                        if outcome == 'Home Win':
-                            color = "🟢"
-                        elif outcome == 'Away Win':
-                            color = "🔴"
-                        else:
-                            color = "🟡"
-                        
-                        st.metric(f"{color} {outcome}", f"{prob:.1%}")
-                        st.progress(prob)
-                
-                # Detailed probability chart
-                fig_probs = px.bar(x=list(prob_dict.keys()), y=list(prob_dict.values()),
-                                  title="Match Outcome Probabilities",
-                                  color=list(prob_dict.values()),
-                                  color_continuous_scale='viridis')
-                fig_probs.update_layout(showlegend=False, yaxis_title="Probability")
-                st.plotly_chart(fig_probs, use_container_width=True)
-                
-                # Historical head-to-head
-                st.markdown('<h3 class="sub-header">📊 Historical Head-to-Head</h3>', unsafe_allow_html=True)
-                
-                h2h = df[((df['HomeTeam'] == home_team) & (df['AwayTeam'] == away_team)) |
-                        ((df['HomeTeam'] == away_team) & (df['AwayTeam'] == home_team))]
-                
-                if len(h2h) > 0:
-                    # H2H statistics
-                    home_wins_h2h = len(h2h[(h2h['HomeTeam'] == home_team) & (h2h['FTHG'] > h2h['FTAG'])])
-                    away_wins_h2h = len(h2h[(h2h['AwayTeam'] == home_team) & (h2h['FTAG'] > h2h['FTHG'])])
-                    draws_h2h = len(h2h[h2h['FTHG'] == h2h['FTAG']])
+            # Encode teams
+            home_encoded = le_home.transform([home_team])[0]
+            away_encoded = le_away.transform([away_team])[0]
+            
+            # Prepare features
+            features = [home_encoded, away_encoded]
+            
+            # Add additional features if model was trained with them
+            additional_features = ['HS', 'AS', 'HST', 'AST', 'HC', 'AC']
+            for feature in additional_features:
+                if feature in df.columns and feature in feature_cols:
+                    # Use team averages for additional features
+                    home_avg = df[df['HomeTeam'] == home_team][feature].mean()
+                    away_avg = df[df['AwayTeam'] == away_team][feature].mean()
                     
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric(f"{home_team} Wins", home_wins_h2h)
-                    with col2:
-                        st.metric("Draws", draws_h2h)
-                    with col3:
-                        st.metric(f"{away_team} Wins", away_wins_h2h)
+                    if pd.isna(home_avg):
+                        home_avg = df[feature].mean()
+                    if pd.isna(away_avg):
+                        away_avg = df[feature].mean()
                     
-                    # Recent H2H matches
-                    st.markdown("**Recent H2H Matches:**")
-                    recent_h2h = h2h.tail(5)[['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'Result']]
-                    st.dataframe(recent_h2h, use_container_width=True)
+                    features.extend([home_avg, away_avg])
+            
+            # Ensure we have the right number of features
+            while len(features) < len(feature_cols):
+                features.append(0)
+            
+            features_array = np.array(features[:len(feature_cols)]).reshape(1, -1)
+            
+            # Make prediction
+            prediction = model.predict(features_array)[0]
+            probabilities = model.predict_proba(features_array)[0]
+            
+            # Display results
+            st.markdown('<h3 class="sub-header">🏆 Prediction Results</h3>', unsafe_allow_html=True)
+            
+            # Main prediction
+            st.markdown(f"""
+            <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                        border-radius: 15px; color: white; margin: 1rem 0;">
+                <h2>{home_team} vs {away_team}</h2>
+                <h1>🏆 {prediction}</h1>
+                <h3>Confidence: {max(probabilities):.1%}</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Probability breakdown
+            classes = model.classes_
+            prob_dict = dict(zip(classes, probabilities))
+            
+            st.markdown("**📊 Outcome Probabilities:**")
+            
+            cols = st.columns(len(classes))
+            for i, (outcome, prob) in enumerate(prob_dict.items()):
+                with cols[i]:
+                    if outcome == 'Home Win':
+                        color = "🟢"
+                    elif outcome == 'Away Win':
+                        color = "🔴"
+                    else:
+                        color = "🟡"
                     
-                else:
-                    st.info("ℹ️ No historical matches found between these teams.")
+                    st.metric(f"{color} {outcome}", f"{prob:.1%}")
+                    st.progress(prob)
+            
+            # Detailed probability chart
+            fig_probs = px.bar(x=list(prob_dict.keys()), y=list(prob_dict.values()),
+                              title="Match Outcome Probabilities",
+                              color=list(prob_dict.values()),
+                              color_continuous_scale='viridis')
+            fig_probs.update_layout(showlegend=False, yaxis_title="Probability")
+            st.plotly_chart(fig_probs, use_container_width=True)
+            
+            # Historical head-to-head
+            st.markdown('<h3 class="sub-header">📊 Historical Head-to-Head</h3>', unsafe_allow_html=True)
+            
+            h2h = df[((df['HomeTeam'] == home_team) & (df['AwayTeam'] == away_team)) |
+                    ((df['HomeTeam'] == away_team) & (df['AwayTeam'] == home_team))]
+            
+            if len(h2h) > 0:
+                # H2H statistics
+                home_wins_h2h = len(h2h[(h2h['HomeTeam'] == home_team) & (h2h['FTHG'] > h2h['FTAG'])])
+                away_wins_h2h = len(h2h[(h2h['AwayTeam'] == home_team) & (h2h['FTAG'] > h2h['FTHG'])])
+                draws_h2h = len(h2h[h2h['FTHG'] == h2h['FTAG']])
                 
-                # Additional insights
-                st.markdown('<h3 class="sub-header">🔍 Additional Insights</h3>', unsafe_allow_html=True)
-                
-                col1, col2 = st.columns(2)
-                
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.markdown(f"**{home_team} Recent Form:**")
-                    home_recent = get_team_data(df, home_team).tail(5)
-                    home_recent_results = home_recent['Team_Result'].tolist()
-                    form_colors = {'Win': '🟢', 'Draw': '🟡', 'Loss': '🔴'}
-                    home_form = ' '.join([form_colors[result] for result in reversed(home_recent_results)])
-                    st.write(f"Last 5: {home_form}")
-                    
-                    home_recent_points = len([r for r in home_recent_results if r == 'Win']) * 3 + len([r for r in home_recent_results if r == 'Draw'])
-                    st.write(f"Points from last 5: {home_recent_points}/15")
-                
+                    st.metric(f"{home_team} Wins", home_wins_h2h)
                 with col2:
-                    st.markdown(f"**{away_team} Recent Form:**")
-                    away_recent = get_team_data(df, away_team).tail(5)
-                    away_recent_results = away_recent['Team_Result'].tolist()
-                    away_form = ' '.join([form_colors[result] for result in reversed(away_recent_results)])
-                    st.write(f"Last 5: {away_form}")
-                    
-                    away_recent_points = len([r for r in away_recent_results if r == 'Win']) * 3 + len([r for r in away_recent_results if r == 'Draw'])
-                    st.write(f"Points from last 5: {away_recent_points}/15")
-                    
-            except Exception as e:
-                st.error(f"❌ Error making prediction: {e}")
-                st.write("Please ensure both teams have sufficient data for prediction.")
+                    st.metric("Draws", draws_h2h)
+                with col3:
+                    st.metric(f"{away_team} Wins", away_wins_h2h)
+                
+                # Recent H2H matches
+                st.markdown("**Recent H2H Matches:**")
+                recent_h2h = h2h.tail(5)[['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'Result']]
+                st.dataframe(recent_h2h, use_container_width=True)
+                
+            else:
+                st.info(" No historical matches found between these teams.")
+            
+            # Additional insights
+            st.markdown('<h3 class="sub-header">🔍 Additional Insights</h3>', unsafe_allow_html=True)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown(f"**{home_team} Recent Form:**")
+                home_recent = get_team_data(df, home_team).tail(5)
+                home_recent_results = home_recent['Team_Result'].tolist()
+                form_colors = {'Win': '🟢', 'Draw': '🟡', 'Loss': '🔴'}
+                home_form = ' '.join([form_colors[result] for result in reversed(home_recent_results)])
+                st.write(f"Last 5: {home_form}")
+                
+                home_recent_points = len([r for r in home_recent_results if r == 'Win']) * 3 + len([r for r in home_recent_results if r == 'Draw'])
+                st.write(f"Points from last 5: {home_recent_points}/15")
+            
+            with col2:
+                st.markdown(f"**{away_team} Recent Form:**")
+                away_recent = get_team_data(df, away_team).tail(5)
+                away_recent_results = away_recent['Team_Result'].tolist()
+                away_form = ' '.join([form_colors[result] for result in reversed(away_recent_results)])
+                st.write(f"Last 5: {away_form}")
+                
+                away_recent_points = len([r for r in away_recent_results if r == 'Win']) * 3 + len([r for r in away_recent_results if r == 'Draw'])
+                st.write(f"Points from last 5: {away_recent_points}/15")
 
 def main():
-    """Main application"""
+    
     st.sidebar.title("⚽ Soccer Team Analytics")
     st.sidebar.markdown("---")
     
@@ -1153,9 +1004,7 @@ def main():
         " Match Prediction": page_prediction
     }
     
-    selected_page = st.sidebar.selectbox(" Choose Analysis:", list(pages.keys()))
-    
-
+    selected_page = st.sidebar.selectbox("Choose Analysis:", list(pages.keys()))
     
     # Run the selected page
     pages[selected_page]()
