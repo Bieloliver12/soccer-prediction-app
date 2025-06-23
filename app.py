@@ -548,7 +548,6 @@ def main():
     
     # Simple sidebar navigation
     st.sidebar.title("⚽ Soccer Analytics")
-    st.sidebar.write("Navigate through different analysis pages")
     
     pages = {
         "Data Overview": page_data_overview,
@@ -557,7 +556,7 @@ def main():
         "Match Prediction": page_prediction
     }
     
-    selected_page = st.sidebar.selectbox("Choose Analysis Page:", list(pages.keys()))
+    selected_page = st.sidebar.selectbox("Pages:", list(pages.keys()))
     
     # Run the selected page
     pages[selected_page]()
